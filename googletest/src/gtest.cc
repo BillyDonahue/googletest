@@ -325,12 +325,10 @@ GTEST_DEFINE_bool_(
     "if exceptions are enabled or exit the program with a non-zero code "
     "otherwise. For use with an external test framework.");
 
-#if GTEST_USE_OWN_FLAGFILE_FLAG_
 GTEST_DEFINE_string_(
     flagfile,
     internal::StringFromGTestEnv("flagfile", ""),
     "This flag specifies the flagfile to read command-line flags from.");
-#endif  // GTEST_USE_OWN_FLAGFILE_FLAG_
 
 namespace internal {
 
@@ -5828,107 +5826,180 @@ static void PrintColorEncoded(const char* str) {
   }
 }
 
-static const char kColorEncodedHelpMessage[] =
-"This program contains tests written using " GTEST_NAME_ ". You can use the\n"
-"following command line flags to control its behavior:\n"
-"\n"
-"Test Selection:\n"
-"  @G--" GTEST_FLAG_PREFIX_ "list_tests@D\n"
-"      List the names of all tests instead of running them. The name of\n"
-"      TEST(Foo, Bar) is \"Foo.Bar\".\n"
-"  @G--" GTEST_FLAG_PREFIX_ "filter=@YPOSTIVE_PATTERNS"
-    "[@G-@YNEGATIVE_PATTERNS]@D\n"
-"      Run only the tests whose name matches one of the positive patterns but\n"
-"      none of the negative patterns. '?' matches any single character; '*'\n"
-"      matches any substring; ':' separates two patterns.\n"
-"  @G--" GTEST_FLAG_PREFIX_ "also_run_disabled_tests@D\n"
-"      Run all disabled tests too.\n"
-"\n"
-"Test Execution:\n"
-"  @G--" GTEST_FLAG_PREFIX_ "repeat=@Y[COUNT]@D\n"
-"      Run the tests repeatedly; use a negative count to repeat forever.\n"
-"  @G--" GTEST_FLAG_PREFIX_ "shuffle@D\n"
-"      Randomize tests' orders on every iteration.\n"
-"  @G--" GTEST_FLAG_PREFIX_ "random_seed=@Y[NUMBER]@D\n"
-"      Random number seed to use for shuffling test orders (between 1 and\n"
-"      99999, or 0 to use a seed based on the current time).\n"
-"\n"
-"Test Output:\n"
-"  @G--" GTEST_FLAG_PREFIX_ "color=@Y(@Gyes@Y|@Gno@Y|@Gauto@Y)@D\n"
-"      Enable/disable colored output. The default is @Gauto@D.\n"
-"  -@G-" GTEST_FLAG_PREFIX_ "print_time=0@D\n"
-"      Don't print the elapsed time of each test.\n"
-"  @G--" GTEST_FLAG_PREFIX_ "output=@Y(@Gjson@Y|@Gxml@Y)[@G:@YDIRECTORY_PATH@G"
-    GTEST_PATH_SEP_ "@Y|@G:@YFILE_PATH]@D\n"
-"      Generate a JSON or XML report in the given directory or with the given\n"
-"      file name. @YFILE_PATH@D defaults to @Gtest_detail.xml@D.\n"
-# if GTEST_CAN_STREAM_RESULTS_
-"  @G--" GTEST_FLAG_PREFIX_ "stream_result_to=@YHOST@G:@YPORT@D\n"
-"      Stream test results to the given server.\n"
-# endif  // GTEST_CAN_STREAM_RESULTS_
-"\n"
-"Assertion Behavior:\n"
-# if GTEST_HAS_DEATH_TEST && !GTEST_OS_WINDOWS
-"  @G--" GTEST_FLAG_PREFIX_ "death_test_style=@Y(@Gfast@Y|@Gthreadsafe@Y)@D\n"
-"      Set the default death test style.\n"
-# endif  // GTEST_HAS_DEATH_TEST && !GTEST_OS_WINDOWS
-"  @G--" GTEST_FLAG_PREFIX_ "break_on_failure@D\n"
-"      Turn assertion failures into debugger break-points.\n"
-"  @G--" GTEST_FLAG_PREFIX_ "throw_on_failure@D\n"
-"      Turn assertion failures into C++ exceptions for use by an external\n"
-"      test framework.\n"
-"  @G--" GTEST_FLAG_PREFIX_ "catch_exceptions=0@D\n"
-"      Do not report exceptions as test failures. Instead, allow them\n"
-"      to crash the program or throw a pop-up (on Windows).\n"
-"\n"
-"Except for @G--" GTEST_FLAG_PREFIX_ "list_tests@D, you can alternatively set "
-    "the corresponding\n"
-"environment variable of a flag (all letters in upper-case). For example, to\n"
-"disable colored text output, you can either specify @G--" GTEST_FLAG_PREFIX_
-    "color=no@D or set\n"
-"the @G" GTEST_FLAG_PREFIX_UPPER_ "COLOR@D environment variable to @Gno@D.\n"
-"\n"
-"For more information, please read the " GTEST_NAME_ " documentation at\n"
-"@G" GTEST_PROJECT_URL_ "@D. If you find a bug in " GTEST_NAME_ "\n"
-"(not one in your own code or tests), please report it to\n"
-"@G<" GTEST_DEV_EMAIL_ ">@D.\n";
+void ReplacePattern(std::string& msg,
+                    const std::string& keyOpen,
+                    const std::string& keyClose,
+                    std::function<std::string(const std::string&)> func) {
+  std::size_t patBegin = 0;
+  while (true) {
+    patBegin = msg.find(keyOpen, patBegin);
+    if (patBegin == std::string::npos)
+      break;
+    std::size_t nameBegin = patBegin + keyOpen.size();
+    std::size_t nameEnd = msg.find(keyClose, nameBegin);
+    if (nameEnd == std::string::npos)
+      break;
+    std::size_t patEnd = nameEnd + keyClose.size();
+    std::string name = msg.substr(nameBegin, nameEnd - nameBegin);
+    msg.replace(patBegin, patEnd - patBegin, func(name));
+  }
+}
 
-static bool ParseGoogleTestFlag(const char* const arg) {
-  return ParseBoolFlag(arg, kAlsoRunDisabledTestsFlag,
-                       &GTEST_FLAG(also_run_disabled_tests)) ||
-      ParseBoolFlag(arg, kBreakOnFailureFlag,
-                    &GTEST_FLAG(break_on_failure)) ||
-      ParseBoolFlag(arg, kCatchExceptionsFlag,
-                    &GTEST_FLAG(catch_exceptions)) ||
-      ParseStringFlag(arg, kColorFlag, &GTEST_FLAG(color)) ||
-      ParseStringFlag(arg, kDeathTestStyleFlag,
-                      &GTEST_FLAG(death_test_style)) ||
-      ParseBoolFlag(arg, kDeathTestUseFork,
-                    &GTEST_FLAG(death_test_use_fork)) ||
-      ParseStringFlag(arg, kFilterFlag, &GTEST_FLAG(filter)) ||
-      ParseStringFlag(arg, kInternalRunDeathTestFlag,
-                      &GTEST_FLAG(internal_run_death_test)) ||
-      ParseBoolFlag(arg, kListTestsFlag, &GTEST_FLAG(list_tests)) ||
-      ParseStringFlag(arg, kOutputFlag, &GTEST_FLAG(output)) ||
-      ParseBoolFlag(arg, kPrintTimeFlag, &GTEST_FLAG(print_time)) ||
-      ParseBoolFlag(arg, kPrintUTF8Flag, &GTEST_FLAG(print_utf8)) ||
-      ParseInt32Flag(arg, kRandomSeedFlag, &GTEST_FLAG(random_seed)) ||
-      ParseInt32Flag(arg, kRepeatFlag, &GTEST_FLAG(repeat)) ||
-      ParseBoolFlag(arg, kShuffleFlag, &GTEST_FLAG(shuffle)) ||
-      ParseInt32Flag(arg, kStackTraceDepthFlag,
-                     &GTEST_FLAG(stack_trace_depth)) ||
-      ParseStringFlag(arg, kStreamResultToFlag,
-                      &GTEST_FLAG(stream_result_to)) ||
-      ParseBoolFlag(arg, kThrowOnFailureFlag,
-                    &GTEST_FLAG(throw_on_failure));
+
+std::string ColorEncodedHelpMessage() {
+  std::string msg =
+R"(This program contains tests written using {v:GTEST_NAME_}. You can use the
+following command line flags to control its behavior:
+
+Test Selection:
+  {f:list_tests}
+      List the names of all tests instead of running them. The name of
+      TEST(Foo, Bar) is "Foo.Bar".
+  {f:filter}=@YPOSITIVE_PATTERNS[@G-@YNEGATIVE_PATTERNS]@D
+      Run only the tests whose name matches one of the positive patterns but
+      none of the negative patterns. '?' matches any single character; '*'
+      matches any substring; ':' separates two patterns.
+  {f:also_run_disabled_tests}
+      Run all disabled tests too.
+
+Test Execution:
+  {f:repeat}=@Y[COUNT]@D
+      Run the tests repeatedly; use a negative count to repeat forever.
+  {f:shuffle}
+      Randomize tests' orders on every iteration.
+  {f:random_seed}=@Y[NUMBER]@D
+      Random number seed to use for shuffling test orders (between 1 and
+      99999, or 0 to use a seed based on the current time).
+
+Test Output:
+  {f:color}=@Y(@Gyes@Y|@Gno@Y|@Gauto@Y)@D
+      Enable/disable colored output. The default is @Gauto@D.
+  {f:print_time}=@G0@D
+      Don't print the elapsed time of each test.
+  {f:output}=@Y(@Gjson@Y|@Gxml@Y)[@G:@YDIRECTORY_PATH)"
+    R"(@G{v:GTEST_PATH_SEP_}@Y|@G:@YFILE_PATH]@D
+      Generate a JSON or XML report in the given directory or with the given
+      file name. @YFILE_PATH@D defaults to @Gtest_detail.xml@D.)"
+# if GTEST_CAN_STREAM_RESULTS_
+R"(
+  {f:stream_result_to}=@YHOST@G:@YPORT@D
+      Stream test results to the given server.)"
+# endif  // GTEST_CAN_STREAM_RESULTS_
+R"(
+
+Assertion Behavior:)"
+# if GTEST_HAS_DEATH_TEST && !GTEST_OS_WINDOWS
+R"(
+  {f:death_test_style}=@Y(@Gfast@Y|@Gthreadsafe@Y)@D
+      Set the default death test style.)"
+# endif  // GTEST_HAS_DEATH_TEST && !GTEST_OS_WINDOWS
+R"(
+  {f:break_on_failure}
+      Turn assertion failures into debugger break-points.
+  {f:throw_on_failure}
+      Turn assertion failures into C++ exceptions for use by an external
+      test framework.
+  {f:catch_exceptions}=@G0@D
+      Do not report exceptions as test failures. Instead, allow them
+      to crash the program or throw a pop-up (on Windows).
+
+Except for {f:list_tests}, you can alternatively set the corresponding
+environment variable of a flag (all letters in upper-case). For example, to
+disable colored text output, you can either specify {f:color}=@Gno@D or set
+the @G{v:GTEST_FLAG_PREFIX_UPPER_}COLOR@D environment variable to @Gno@D.
+
+For more information, please read the {v:GTEST_NAME_} documentation at
+@G{v:GTEST_PROJECT_URL_}@D. If you find a bug in {v:GTEST_NAME_}
+(not one in your own code or tests), please report it to
+@G<{v:GTEST_DEV_EMAIL_}>@D.
+)";
+  ReplacePattern(msg, "{f:", "}", [](const std::string& name) {
+    return std::string("@G--") + GTEST_FLAG_PREFIX_ + name + "@D";
+  });
+  ReplacePattern(msg, "{v:", "}", [](const std::string& name) {
+    const std::map<std::string, std::string> vars{
+#define VAR(var) {#var, var}
+      VAR(GTEST_NAME_),
+      VAR(GTEST_FLAG_PREFIX_),
+      VAR(GTEST_FLAG_PREFIX_UPPER_),
+      VAR(GTEST_PATH_SEP_),
+      VAR(GTEST_PROJECT_URL_),
+      VAR(GTEST_DEV_EMAIL_),
+#undef VAR
+    };
+    auto it = vars.find(name);
+    if (it == vars.end())
+      return name;
+    return it->second;
+  });
+  return msg;
 }
 
 #if GTEST_USE_OWN_FLAGFILE_FLAG_
+static const bool kUseOwnFlagfile = true;
+#else
+static const bool kUseOwnFlagfile = false;
+#endif  // GTEST_USE_OWN_FLAGFILE_FLAG_
+
+struct FlagSpec {
+  FlagSpec(const char* n, bool* p) : FlagSpec(n, p, 'b'){}
+  FlagSpec(const char* n, internal::Int32* p) : FlagSpec(n, p, 'i') {}
+  FlagSpec(const char* n, std::string* p) : FlagSpec(n, p, 's') {}
+
+  const char* name() const { return n_; }
+  void* ptr() const { return p_; }
+
+  bool parse(const char* arg) const {
+    switch (t_) {
+      case 'b': return ParseBoolFlag(arg, n_, (bool*)p_);
+      case 'i': return ParseInt32Flag(arg, n_, (internal::Int32*)p_);
+      case 's': return ParseStringFlag(arg, n_, (std::string*)p_);
+    }
+    return false;  // not reached
+  }
+
+private:
+  FlagSpec(const char* n, void* p, char t) : n_(n), p_(p), t_(t) {}
+  const char* n_;
+  void* p_;
+  char t_;  // type of `p_`: {b:bool, i:Int32, s:string}
+};
+
+static bool ParseGoogleTestFlag(const char* const arg) {
+  static const FlagSpec kFlagSpecs[] = {
+#define FLAG_SPEC_(f) FlagSpec(#f, &GTEST_FLAG(f))
+    FLAG_SPEC_(also_run_disabled_tests),
+    FLAG_SPEC_(break_on_failure),
+    FLAG_SPEC_(catch_exceptions),
+    FLAG_SPEC_(color),
+    FLAG_SPEC_(filter),
+    FLAG_SPEC_(list_tests),
+    FLAG_SPEC_(output),
+    FLAG_SPEC_(print_time),
+    FLAG_SPEC_(print_utf8),
+    FLAG_SPEC_(random_seed),
+    FLAG_SPEC_(repeat),
+    FLAG_SPEC_(shuffle),
+    FLAG_SPEC_(stack_trace_depth),
+    FLAG_SPEC_(stream_result_to),
+    FLAG_SPEC_(throw_on_failure),
+    FLAG_SPEC_(death_test_style),
+    FLAG_SPEC_(death_test_use_fork),
+    FLAG_SPEC_(internal_run_death_test),
+#undef FLAG_SPEC_
+  };
+  for (const FlagSpec& spec : kFlagSpecs) {
+    if (spec.parse(arg)) {
+        return true;
+    }
+  }
+  return false;
+}
+
 static void LoadFlagsFromFile(const std::string& path) {
   FILE* flagfile = posix::FOpen(path.c_str(), "r");
   if (!flagfile) {
-    GTEST_LOG_(FATAL) << "Unable to open file \"" << GTEST_FLAG(flagfile)
-                      << "\"";
+    GTEST_LOG_(FATAL) << "Unable to open file \"" << path << "\"";
   }
   std::string contents(ReadEntireFile(flagfile));
   posix::FClose(flagfile);
@@ -5941,29 +6012,22 @@ static void LoadFlagsFromFile(const std::string& path) {
       g_help_flag = true;
   }
 }
-#endif  // GTEST_USE_OWN_FLAGFILE_FLAG_
 
 // Parses the command line for Google Test flags, without initializing
 // other parts of Google Test.  The type parameter CharType can be
 // instantiated to either char or wchar_t.
 template <typename CharType>
 void ParseGoogleTestFlagsOnlyImpl(int* argc, CharType** argv) {
-  for (int i = 1; i < *argc; i++) {
-    const std::string arg_string = StreamableToString(argv[i]);
+  for (CharType** argIter = argv + 1; argIter != argv + *argc; ++argIter) {
+    const std::string arg_string = StreamableToString(*argIter);
     const char* const arg = arg_string.c_str();
-
-    using internal::ParseBoolFlag;
-    using internal::ParseInt32Flag;
-    using internal::ParseStringFlag;
-
-    bool remove_flag = false;
-    if (ParseGoogleTestFlag(arg)) {
-      remove_flag = true;
-#if GTEST_USE_OWN_FLAGFILE_FLAG_
-    } else if (ParseStringFlag(arg, kFlagfileFlag, &GTEST_FLAG(flagfile))) {
+    const FlagSpec* flagSpec = ParseGoogleTestFlag(arg);
+    if (flagSpec != nullptr) {
+      *argIter = nullptr;
+    } else if (kUseOwnFlagfile &&
+        internal::FlagSpec("flagfile", &GTEST_FLAG(flagfile)).parse(arg)) {
       LoadFlagsFromFile(GTEST_FLAG(flagfile));
-      remove_flag = true;
-#endif  // GTEST_USE_OWN_FLAGFILE_FLAG_
+      *argIter = nullptr;
     } else if (arg_string == "--help" || arg_string == "-h" ||
                arg_string == "-?" || arg_string == "/?" ||
                HasGoogleTestFlagPrefix(arg)) {
@@ -5971,30 +6035,15 @@ void ParseGoogleTestFlagsOnlyImpl(int* argc, CharType** argv) {
       // internal ones) trigger help display.
       g_help_flag = true;
     }
-
-    if (remove_flag) {
-      // Shift the remainder of the argv list left by one.  Note
-      // that argv has (*argc + 1) elements, the last one always being
-      // NULL.  The following loop moves the trailing NULL element as
-      // well.
-      for (int j = i; j != *argc; j++) {
-        argv[j] = argv[j + 1];
-      }
-
-      // Decrements the argument count.
-      (*argc)--;
-
-      // We also need to decrement the iterator as we just removed
-      // an element.
-      i--;
-    }
   }
+  *argc = std::remove(argv, argv + *argc, nullptr) - argv;
+  argv[*argc] = nullptr;  // keep argv nullptr-terminated
 
   if (g_help_flag) {
     // We print the help here instead of in RUN_ALL_TESTS(), as the
     // latter may not be called at all if the user is using Google
     // Test with another testing framework.
-    PrintColorEncoded(kColorEncodedHelpMessage);
+    PrintColorEncoded(ColorEncodedHelpMessage().c_str());
   }
 }
 

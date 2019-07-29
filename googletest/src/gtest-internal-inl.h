@@ -78,23 +78,7 @@ namespace internal {
 // library.  This is solely for testing GetTestTypeId().
 GTEST_API_ extern const TypeId kTestTypeIdInGoogleTest;
 
-// Names of the flags (needed for parsing Google Test flags).
-const char kAlsoRunDisabledTestsFlag[] = "also_run_disabled_tests";
-const char kBreakOnFailureFlag[] = "break_on_failure";
-const char kCatchExceptionsFlag[] = "catch_exceptions";
-const char kColorFlag[] = "color";
 const char kFilterFlag[] = "filter";
-const char kListTestsFlag[] = "list_tests";
-const char kOutputFlag[] = "output";
-const char kPrintTimeFlag[] = "print_time";
-const char kPrintUTF8Flag[] = "print_utf8";
-const char kRandomSeedFlag[] = "random_seed";
-const char kRepeatFlag[] = "repeat";
-const char kShuffleFlag[] = "shuffle";
-const char kStackTraceDepthFlag[] = "stack_trace_depth";
-const char kStreamResultToFlag[] = "stream_result_to";
-const char kThrowOnFailureFlag[] = "throw_on_failure";
-const char kFlagfileFlag[] = "flagfile";
 
 // A valid random seed must be in [1, kMaxRandomSeed].
 const int kMaxRandomSeed = 99999;

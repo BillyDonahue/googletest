@@ -37,6 +37,8 @@
 #include "gtest/internal/gtest-port.h"
 #include "gtest/internal/custom/gtest.h"
 
+const char kInternalRunDeathTestFlag[] = "internal_run_death_test";
+
 #if GTEST_HAS_DEATH_TEST
 
 # if GTEST_OS_MAC
